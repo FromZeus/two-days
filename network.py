@@ -2,14 +2,20 @@ import socket
 import sys
 import os
 import multiprocessing
+import threading
+import time
+import struct
 
-def client_handler(conn, addr, q):
-        while True:
-            print(os.getpid() + '\n')
-            msg_size = conn.recv(4)
-            msg = conn.recv(int(msg_size))
-            q.put(msg)
-            q.task_done()
+def client_handler(conn, q):
+    while True:
+        print('in thread')
+        msg_size_str = conn.recv(4)
+        if not msg_size_str:
+            return
+        msg_size = struct.unpack('I', msg_size_str)[0]
+        msg = conn.recv(msg_size)
+        q.put(msg)
+        #q.task_done()
 
 class Network:
     
@@ -17,29 +23,33 @@ class Network:
         if not (self.sock is None):
             self.sock.close()
 
-    def host(self, port = 9090, max_client_queue = 10, pool_size = 10):
+    def host(self, port = 9090, max_client_queue = 10):
         self.sock = socket.socket()
         self.sock.bind(('', port))
         self.sock.listen(max_client_queue)
         
-        ppool = multiprocessing.Pool(processes = pool_size)
-        self.queue = multiprocessing.queues.JoinableQueue()
+        self.queue_dict = {}
+        self.conn_dict = {}
 
         while True:
             conn, addr = self.sock.accept()
+            self.conn_dict.update({addr: conn})
             print('connected: ' + str(addr))
-            #print(ppool.apply_async(os.getpid, ()).get(timeout = 1))
-            ppool.apply_async(client_handler, (conn, addr, self.queue))
-            print(self.queue.qsize())
+            
+            queue = multiprocessing.Queue()
+            self.queue_dict.update({addr: queue})
+
+            t = threading.Thread(target=client_handler, args=(conn, queue))
+            t.start()
 
     def connect(self, ip, port = 9090):
         self.sock = socket.socket()
         self.sock.connect((ip, port))
 
     def send(self, data, size):
-        self.sock.send(str(size))
+        msg_size = struct.pack('I', size)
+        self.sock.send(msg_size)
         self.sock.send(data)
     
     def __exit__(self):
         self.sock.close()
-
