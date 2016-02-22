@@ -39,7 +39,7 @@ class Network:
             queue = multiprocessing.Queue()
             self.queue_dict.update({addr: queue})
 
-            t = threading.Thread(target=client_handler, args=(conn, queue))
+            t = threading.Thread(target=client_handler, args=(conn, self.queue_dict[addr])
             t.start()
 
     def connect(self, ip, port = 9090):
@@ -51,5 +51,10 @@ class Network:
         self.sock.send(msg_size)
         self.sock.send(data)
     
+    def sendto(data, size, conn):
+        msg_size = struct.pack('I', size)
+        conn.send(msg_size)
+        conn.send(data)
+
     def __exit__(self):
         self.sock.close()
